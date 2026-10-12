@@ -56,7 +56,18 @@ release(counter_lock)
 
 That should consistently produce 300,000.
 
-## 3. Q3 Deadlock Results
+## 3. Q2 Counting Semaphores and Critical Sections
+
+A fixed-size kernel semaphore table stores each semaphore's count and synchronization lock. `sem_init(id, value)` initializes an entry, `sem_wait(id)` acquires a permit or sleeps while none is available, and `sem_signal(id)` releases a permit and wakes a waiter when required. The count update and the sleep/wakeup transition must be protected consistently to avoid lost wakeups.
+
+In `synctest.c`, a mutex semaphore surrounds counter updates by three threads performing 100,000 increments each. The expected protected result is 300,000. The same semaphore API can implement Producer-Consumer with a five-slot buffer: `empty` starts at 5, `full` at 0, and `mutex` at 1. The producer waits for an empty slot before inserting, while the consumer waits for a full slot before removing. Both protect the buffer indices and contents with the mutex.
+
+| Case | Expected counter behavior | Reason |
+|---|---|---|
+| Q1: no lock | Often below 300,000 | Concurrent read-modify-write increments can be lost. |
+| Q2: mutex semaphore | Exactly 300,000 | Only one thread updates the counter inside the critical section at a time. |
+
+## 4. Q3 Deadlock Results
 
 ### Test 1: Deadlocked matrix
 
@@ -106,7 +117,7 @@ Pipe demo result: circular wait detected
 
 The parent then kills and waits for both blocked children.
 
-## 4. Q4 Scheduling Behavior
+## 5. Q4 Scheduling Behavior
 
 I ran `priotest` with one CPU so the result was easier to read. The PIDs can change between runs, but the observed completion behavior was:
 
@@ -135,7 +146,7 @@ Priority 20  |########################################| completion 4
 
 This graph shows completion rank, not exact milliseconds, because the current test does not record per-process timestamps. It still shows the main point: smaller priority numbers run first, and the priority-20 process eventually gets CPU time after aging.
 
-## 5. Problems Faced and Resolutions
+## 6. Problems Faced and Resolutions
 
 1. **Scheduler locking:** I had to inspect candidates under their individual locks, then lock the selected process again before changing it to RUNNING. This avoids holding several process locks during a context switch.
 2. **Tie-breaking:** A rotating scan cursor prevents equal-priority processes from always being selected in fixed process-table order.
